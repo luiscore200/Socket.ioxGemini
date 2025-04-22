@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Manejar conexión/desconexión
     socket.on('connect', () => {
         console.log('Conectado al servidor');
-        addMessage('Conectado al servidor');
+        // No mostramos mensaje de conexión, esperamos el saludo de Gemini
     });
 
     socket.on('disconnect', () => {

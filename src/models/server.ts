@@ -4,9 +4,9 @@ import { Server } from 'socket.io';
 import { SocketModel } from './socket';
 import { GeminiModel } from './gemini';
 import { ApiRoutes } from '../routes/api';
-import { ServerRoutes } from '../routes/server';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import path from 'path';
 
 export class ServerModel {
   private app: express.Application;
@@ -15,7 +15,6 @@ export class ServerModel {
   private socketModel: SocketModel;
   private geminiModel: GeminiModel;
   private apiRoutes: ApiRoutes;
-  private serverRoutes: ServerRoutes;
 
   constructor() {
     // Cargar variables de entorno
@@ -44,11 +43,14 @@ export class ServerModel {
 
     // Inicializar rutas
     this.apiRoutes = new ApiRoutes(this.geminiModel, this.io);
-    this.serverRoutes = new ServerRoutes(this.socketModel, this.io);
 
     // Configurar rutas
     this.app.use('/api', this.apiRoutes.getRouter());
-    this.app.use('/', this.serverRoutes.getRouter());
+    
+    // Ruta raíz
+    this.app.get('/', (req, res) => {
+      res.sendFile(path.join(__dirname, '../../public/index.html'));
+    });
   }
 
   // Inicializar el servidor
