@@ -21,24 +21,33 @@ const safetySettings = [
 ];
 
 // Interfaces
+export interface Material {
+  tipo: string;
+  descripcion: string;
+  cantidad: string;
+}
+
 export interface CotizacionData {
+  materiales: Material[];
+  direccion: string;
+  metodo_pago: string;
+}
+
+export interface GeminiInput {
+  premisa: string;
+  data: CotizacionData;
   mensaje: string;
-  material?: string;
-  direccion?: string;
-  metodoPago?: string;
 }
 
 export interface GeminiResponse {
+  data: Partial<CotizacionData>;
   mensaje: string;
-  material?: string;
-  direccion?: string;
-  metodoPago?: string;
-  cotizacionCompleta: boolean;
 }
 
 // Clase para manejar las interacciones con Gemini
 export class GeminiModel {
   private model: any;
+  private premisaBase: string;
 
   constructor(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
@@ -46,91 +55,59 @@ export class GeminiModel {
       model: "gemini-2.0-flash-lite",
       safetySettings: safetySettings
     });
-  }
 
-  // Extrae información relevante del mensaje
-  private extraerInformacion(mensaje: string, data: CotizacionData): CotizacionData {
-    const lowerMessage = mensaje.toLowerCase();
+    this.premisaBase = `Eres un asistente de cotizaciones amable y conversacional. 
+    Tu objetivo es obtener esta información del cliente de manera natural:
+    - Materiales que necesita (tipo, descripción y cantidad)
+    - Dirección de entrega
+    - Método de pago preferido
     
-    // Extraer material si no está definido
-    if (!data.material && (
-      lowerMessage.includes('acero') || 
-      lowerMessage.includes('aluminio') || 
-      lowerMessage.includes('hierro') ||
-      lowerMessage.includes('varilla')
-    )) {
-      data.material = mensaje;
-    }
+    Debes mantener un tono amable y conversacional.
+    Si falta información, guía suavemente al cliente para obtenerla.
+    Si ya tienes toda la información, genera un resumen amable.
+    NO preguntes por información que ya tengamos.
     
-    // Extraer dirección si no está definida
-    if (!data.direccion && (
-      lowerMessage.includes('calle') || 
-      lowerMessage.includes('avenida') || 
-      lowerMessage.includes('carrera') ||
-      lowerMessage.includes('dirección') ||
-      lowerMessage.includes('direccion') ||
-      lowerMessage.includes('entrega')
-    )) {
-      data.direccion = mensaje;
+    IMPORTANTE: Tu respuesta debe seguir EXACTAMENTE este formato:
+    \`\`\`json
+    {
+      "data": {
+        "materiales": [
+          {
+            "tipo": "tipo del material",
+            "descripcion": "descripción detallada",
+            "cantidad": "cantidad"
+          }
+        ],
+        "direccion": "dirección de entrega",
+        "metodo_pago": "método de pago"
+      },
+      "mensaje": "tu respuesta al usuario"
     }
+    \`\`\`
     
-    // Extraer método de pago si no está definido
-    if (!data.metodoPago && (
-      lowerMessage.includes('tarjeta') || 
-      lowerMessage.includes('efectivo') || 
-      lowerMessage.includes('transferencia') ||
-      lowerMessage.includes('depósito') ||
-      lowerMessage.includes('deposito') ||
-      lowerMessage.includes('pago')
-    )) {
-      data.metodoPago = mensaje;
-    }
-
-    return data;
-  }
-
-  // Verifica si tenemos toda la información necesaria
-  private tieneTodaLaInformacion(data: CotizacionData): boolean {
-    return !!data.material && !!data.direccion && !!data.metodoPago;
-  }
-
-  // Genera un resumen de la cotización
-  private generarResumen(data: CotizacionData): string {
-    return `¡Perfecto! Aquí está el resumen de tu cotización:\n\n` +
-           `Material: ${data.material}\n` +
-           `Dirección: ${data.direccion}\n` +
-           `Método de pago: ${data.metodoPago}\n\n` +
-           `¿Hay algo más que te gustaría saber o modificar?`;
+    En el campo "data" solo debes incluir los datos que hayan sido actualizados o confirmados en el mensaje actual.
+    El campo "mensaje" debe contener tu respuesta natural al usuario.`;
   }
 
   // Procesa un mensaje y genera una respuesta
-  async procesarMensaje(data: CotizacionData): Promise<GeminiResponse> {
+  async procesarMensaje(input: GeminiInput): Promise<GeminiResponse> {
     try {
-      const dataActualizada = this.extraerInformacion(data.mensaje, data);
+      // Combinar la premisa base con la premisa específica del mensaje
+      const premisaCompleta = `${this.premisaBase}\n\n${input.premisa}`;
 
       // Preparar el contexto para Gemini
-      const context = `Eres un asistente de cotizaciones amable y conversacional. 
-        Tu objetivo es obtener esta información del cliente de manera natural:
-        - Material que necesita
-        - Dirección de entrega
-        - Método de pago preferido
+      const context = `Información actual del cliente:
+        Materiales: ${JSON.stringify(input.data.materiales)}
+        Dirección: ${input.data.direccion || 'No especificada'}
+        Método de pago: ${input.data.metodo_pago || 'No especificado'}
         
-        Información actual del cliente:
-        ${dataActualizada.material ? `Material: ${dataActualizada.material}` : 'Material: No especificado'}
-        ${dataActualizada.direccion ? `Dirección: ${dataActualizada.direccion}` : 'Dirección: No especificada'}
-        ${dataActualizada.metodoPago ? `Método de pago: ${dataActualizada.metodoPago}` : 'Método de pago: No especificado'}
-        
-        Si el cliente menciona alguna de estas informaciones, actualízala en tu respuesta.
-        Mantén un tono amable y conversacional.
-        Si falta información, guía suavemente al cliente para obtenerla.
-        Si ya tienes toda la información, genera un resumen amable.
-        NO preguntes por información que ya tengamos.`;
+        Mensaje del cliente: ${input.mensaje}`;
 
       // Generar respuesta
       const result = await this.model.generateContent({
         contents: [{
           role: "user",
-          parts: [{ text: `${context}\n\nCliente: ${data.mensaje}` }]
+          parts: [{ text: `${premisaCompleta}\n\n${context}` }]
         }],
         generationConfig: {
           temperature: 0.7,
@@ -143,13 +120,24 @@ export class GeminiModel {
       const response = await result.response;
       const text = response.text();
 
-      return {
-        mensaje: this.tieneTodaLaInformacion(dataActualizada) ? this.generarResumen(dataActualizada) : text,
-        material: dataActualizada.material,
-        direccion: dataActualizada.direccion,
-        metodoPago: dataActualizada.metodoPago,
-        cotizacionCompleta: this.tieneTodaLaInformacion(dataActualizada)
-      };
+      // Intentar extraer la respuesta en formato JSON
+      try {
+        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[1]);
+        }
+        // Si no encuentra el formato JSON, devolver la respuesta como mensaje
+        return {
+          data: {},
+          mensaje: text
+        };
+      } catch (error) {
+        console.error('Error al parsear la respuesta JSON:', error);
+        return {
+          data: {},
+          mensaje: text
+        };
+      }
     } catch (error: any) {
       console.error('Error al procesar el mensaje con Gemini:', error);
       throw error;
