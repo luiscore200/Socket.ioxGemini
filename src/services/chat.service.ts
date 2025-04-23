@@ -1,5 +1,5 @@
-import { GeminiModel, GeminiResponse, CotizacionData, Material } from '../models/gemini';
-import { Server, Socket } from 'socket.io';
+import { GeminiModel } from '../models/gemini';
+import {  Socket } from 'socket.io';
 
 interface ConversationContext {
   materiales: Material[];
@@ -12,6 +12,24 @@ interface ConversationContext {
     timestamp: Date;
   }[];
 }
+
+export interface CotizacionData {
+    materiales: Material[];
+    direccion: string;
+    metodo_pago: string;
+  }
+
+  export interface GeminiResponse {
+    data: Partial<CotizacionData>;
+    mensaje: string;
+  }
+
+  export interface Material {
+    nombre: string;
+    descripcion: string;
+    cantidad: string;
+  }
+  
 
 type SocketState = 'noWarning' | 'inWarning';
 
@@ -56,18 +74,24 @@ export class ChatService {
 
   private async startConversation(socket: Socket): Promise<void> {
     try {
+
+        const context = `Información actual del cliente:
+        Materiales: [],
+        Dirección: "",
+        Método de pago: ""
+        
+        Mensaje del cliente: "Hola, ¿en qué puedo ayudarte?"`;
+
       const response = await this.geminiModel.procesarMensaje({ 
         premisa_base:premisa_base,
         premisa:premisa_init,
-        data: {
-          materiales: [],
-          direccion: "",
-          metodo_pago: ""
-        },
-        mensaje: "Hola, ¿en qué puedo ayudarte?"
+        data: context
       });
-      this.addToHistory(socket.id, 'assistant', response.mensaje);
-      socket.emit('respuesta', response);
+
+      const parsedResponse = await this.parsedResponse(response);
+
+      this.addToHistory(socket.id, 'assistant',  parsedResponse.mensaje);
+      socket.emit('respuesta', parsedResponse);
       this.scheduleTimeout(socket);
     } catch (error) {
       console.error('Error al iniciar la conversación:', error);
@@ -86,20 +110,24 @@ export class ChatService {
     this.clearTimeouts(socket.id);
     
     // Obtener y actualizar contexto
-    const context = this.conversationContext.get(socket.id)!;
-    this.updateContext(context, data.mensaje);
+    const prev_context = this.conversationContext.get(socket.id)!;
+    this.updateContext(prev_context, data.mensaje);
     this.addToHistory(socket.id, 'user', data.mensaje);
 
     try {
+
+
+        const context = `Información actual del cliente:
+        Materiales: ${JSON.stringify(prev_context.materiales)},
+        Dirección: ${prev_context.direccion},
+        Método de pago: ${prev_context.metodo_pago},
+        
+        Mensaje del cliente: ${data.mensaje}`;
+
       const input = {
         premisa_base:premisa_base,
         premisa:premisa_nudo,
-        data: {
-          materiales: context.materiales || [],
-          direccion: context.direccion || "",
-          metodo_pago: context.metodo_pago || ""
-        },
-        mensaje: data.mensaje
+        data: context
       };
 
       console.log('🤖 Input a la IA:', JSON.stringify(input, null, 2));
@@ -109,14 +137,17 @@ export class ChatService {
       console.log('🤖 Output de la IA:', JSON.stringify(response, null, 2));
 
       // Actualizar contexto con los datos devueltos por la IA
-      if (response.data) {
-        if (response.data.materiales) context.materiales = response.data.materiales;
-        if (response.data.direccion) context.direccion = response.data.direccion;
-        if (response.data.metodo_pago) context.metodo_pago = response.data.metodo_pago;
+
+      const parsedResponse = await this.parsedResponse(response);
+
+      if (parsedResponse.data) {
+        if (parsedResponse.data.materiales) prev_context.materiales = parsedResponse.data.materiales;
+        if (parsedResponse.data.direccion) prev_context.direccion = parsedResponse.data.direccion;
+        if (parsedResponse.data.metodo_pago) prev_context.metodo_pago = parsedResponse.data.metodo_pago;
       }
 
-      this.addToHistory(socket.id, 'assistant', response.mensaje);
-      socket.emit('respuesta', response);
+      this.addToHistory(socket.id, 'assistant', parsedResponse.mensaje);
+      socket.emit('respuesta', parsedResponse);
       
       // Resetear estado a noWarning
       this.socketStates.set(socket.id, 'noWarning');
@@ -190,6 +221,31 @@ export class ChatService {
     socketTimeouts.push(timeout);
     this.timeouts.set(socket.id, socketTimeouts);
   }
+
+
+  private async parsedResponse(text:string):Promise<any>{
+    
+      // Intentar extraer la respuesta en formato JSON
+      try {
+        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[1]);
+        }
+        // Si no encuentra el formato JSON, devolver la respuesta como mensaje
+        return {
+          data: {},
+          mensaje: text
+        };
+      } catch (error) {
+        console.error('Error al parsear la respuesta JSON:', error);
+        return {
+          data: {},
+          mensaje: text
+        };
+      }
+  }
+
+
 } 
 
 

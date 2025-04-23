@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import { CotizacionData } from '../services/chat.service';
 
 // Configuración de seguridad
 const safetySettings = [
@@ -21,57 +22,38 @@ const safetySettings = [
 ];
 
 // Interfaces
-export interface Material {
-  tipo: string;
-  descripcion: string;
-  cantidad: string;
-}
 
-export interface CotizacionData {
-  materiales: Material[];
-  direccion: string;
-  metodo_pago: string;
-}
+
 
 export interface GeminiInput {
-  premisa_base:string;
+  premisa_base: string;
   premisa: string;
-  data: CotizacionData;
-  mensaje: string;
+  data: string;
+//  mensaje: string;
 }
 
-export interface GeminiResponse {
-  data: Partial<CotizacionData>;
-  mensaje: string;
-}
+
 
 // Clase para manejar las interacciones con Gemini
 export class GeminiModel {
   private model: any;
- 
+
   constructor(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
     this.model = genAI.getGenerativeModel({ 
       model: "gemini-2.0-flash-lite",
       safetySettings: safetySettings
     });
-
-   
   }
 
   // Procesa un mensaje y genera una respuesta
-  async procesarMensaje(input: GeminiInput): Promise<GeminiResponse> {
+  async procesarMensaje(input: GeminiInput): Promise<string> {
     try {
-      // Combinar la premisa base con la premisa específica del mensaje
+      // Combinar la premisa base con la premisa específica
       const premisaCompleta = `${input.premisa_base}\n\n${input.premisa}`;
 
       // Preparar el contexto para Gemini
-      const context = `Información actual del cliente:
-        Materiales: ${JSON.stringify(input.data.materiales)}
-        Dirección: ${input.data.direccion || 'No especificada'}
-        Método de pago: ${input.data.metodo_pago || 'No especificado'}
-        
-        Mensaje del cliente: ${input.mensaje}`;
+      const context = input.data;
 
       // Generar respuesta
       const result = await this.model.generateContent({
@@ -90,24 +72,8 @@ export class GeminiModel {
       const response = await result.response;
       const text = response.text();
 
-      // Intentar extraer la respuesta en formato JSON
-      try {
-        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          return JSON.parse(jsonMatch[1]);
-        }
-        // Si no encuentra el formato JSON, devolver la respuesta como mensaje
-        return {
-          data: {},
-          mensaje: text
-        };
-      } catch (error) {
-        console.error('Error al parsear la respuesta JSON:', error);
-        return {
-          data: {},
-          mensaje: text
-        };
-      }
+      return text;
+
     } catch (error: any) {
       console.error('Error al procesar el mensaje con Gemini:', error);
       throw error;
