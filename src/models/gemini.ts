@@ -34,6 +34,7 @@ export interface CotizacionData {
 }
 
 export interface GeminiInput {
+  premisa_base:string;
   premisa: string;
   data: CotizacionData;
   mensaje: string;
@@ -47,8 +48,7 @@ export interface GeminiResponse {
 // Clase para manejar las interacciones con Gemini
 export class GeminiModel {
   private model: any;
-  private premisaBase: string;
-
+ 
   constructor(apiKey: string) {
     const genAI = new GoogleGenerativeAI(apiKey);
     this.model = genAI.getGenerativeModel({ 
@@ -56,44 +56,14 @@ export class GeminiModel {
       safetySettings: safetySettings
     });
 
-    this.premisaBase = `Eres un asistente de cotizaciones amable y conversacional. 
-    Tu objetivo es obtener esta información del cliente de manera natural:
-    - Materiales que necesita (tipo, descripción y cantidad)
-    - Dirección de entrega
-    - Método de pago preferido
-    
-    Debes mantener un tono amable y conversacional.
-    Si falta información, guía suavemente al cliente para obtenerla.
-    Si ya tienes toda la información, genera un resumen amable.
-    NO preguntes por información que ya tengamos.
-    
-    IMPORTANTE: Tu respuesta debe seguir EXACTAMENTE este formato:
-    \`\`\`json
-    {
-      "data": {
-        "materiales": [
-          {
-            "tipo": "tipo del material",
-            "descripcion": "descripción detallada",
-            "cantidad": "cantidad"
-          }
-        ],
-        "direccion": "dirección de entrega",
-        "metodo_pago": "método de pago"
-      },
-      "mensaje": "tu respuesta al usuario"
-    }
-    \`\`\`
-    
-    En el campo "data" solo debes incluir los datos que hayan sido actualizados o confirmados en el mensaje actual.
-    El campo "mensaje" debe contener tu respuesta natural al usuario.`;
+   
   }
 
   // Procesa un mensaje y genera una respuesta
   async procesarMensaje(input: GeminiInput): Promise<GeminiResponse> {
     try {
       // Combinar la premisa base con la premisa específica del mensaje
-      const premisaCompleta = `${this.premisaBase}\n\n${input.premisa}`;
+      const premisaCompleta = `${input.premisa_base}\n\n${input.premisa}`;
 
       // Preparar el contexto para Gemini
       const context = `Información actual del cliente:
