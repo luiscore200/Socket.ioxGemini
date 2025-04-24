@@ -5,6 +5,7 @@ import { SocketService } from './models/socket.model';
 import dotenv from 'dotenv';
 import path from 'path';
 
+
 // Cargar variables de entorno
 dotenv.config();
 
@@ -26,6 +27,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
+
+
 
 // Inicializar Socket.IO
 new SocketService(io).initialize();
