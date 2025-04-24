@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Escuchar mensajes del servidor
-    socket.on('respuesta', (data) => {
+    socket.on('chatbot:respuesta', (data) => {
         console.log('Mensaje recibido del servidor:', data);
         if (data && data.mensaje) {
             addMessage(data.mensaje);
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (text) {
             console.log('Enviando mensaje:', text);
             // Enviar mensaje al servidor
-            socket.emit('mensaje', { mensaje: text });
+            socket.emit('chatbot:mensaje', { mensaje: text });
             
             // Mostrar mensaje en el chat
             addMessage(text, true);

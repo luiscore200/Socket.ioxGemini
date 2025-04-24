@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 
 
+
 // Cargar variables de entorno
 dotenv.config();
 
@@ -31,7 +32,10 @@ app.get('/', (req, res) => {
 
 
 // Inicializar Socket.IO
+
 new SocketService(io).initialize();
+
+
 
 // Iniciar servidor
 httpServer.listen(PORT, () => {

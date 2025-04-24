@@ -1,6 +1,9 @@
 import { Socket, Server } from "socket.io";
 
 export class RoomManager {
+
+  
+
   static join(socket: Socket, room: string) {
     socket.join(room);
     console.log(`📥 ${socket.id} joined room: ${room}`);

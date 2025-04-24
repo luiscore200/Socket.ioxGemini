@@ -57,7 +57,7 @@ export class ChatBotService implements ISocketController {
     });
     
     // Manejar mensajes del usuario desde front-end
-    this.socket.on('mensaje', async (data: { mensaje: string }) => {
+    this.socket.on('chatbot:mensaje', async (data: { mensaje: string }) => {
       console.log('📨 Mensaje recibido por el bot:', data.mensaje);
       await this.handleMessage(data.mensaje);
     });
@@ -90,11 +90,11 @@ export class ChatBotService implements ISocketController {
       const parsedResponse = await this.parsedResponse(response);
 
       this.addToHistory('assistant', parsedResponse.mensaje);
-      this.socket.emit('respuesta', parsedResponse);
+      this.socket.emit('chatbot:respuesta', parsedResponse);
       this.scheduleTimeout();
     } catch (error) {
       console.error('Error al iniciar la conversación:', error);
-      this.socket.emit('respuesta', { 
+      this.socket.emit('chatbot:respuesta', { 
         data: {},
         mensaje: 'Hola, ¿en qué puedo ayudarte?'
       });
@@ -144,7 +144,7 @@ export class ChatBotService implements ISocketController {
       this.addToHistory('assistant', parsedResponse.mensaje);
 
       // Enviar respuesta al emisor
-      this.socket.emit('respuesta', parsedResponse);
+      this.socket.emit('chatbot:respuesta', parsedResponse);
       
       // Resetear estado a noWarning
       this.socketStates.set(this.socket.id, 'noWarning');
@@ -153,7 +153,7 @@ export class ChatBotService implements ISocketController {
       this.scheduleTimeout();
     } catch (error) {
       console.error('Error al procesar mensaje:', error);
-      this.socket.emit('respuesta', {
+      this.socket.emit('chatbot:respuesta', {
         mensaje: 'Lo siento, hubo un error al procesar tu mensaje.',
         cotizacionCompleta: false
       });
@@ -201,7 +201,7 @@ export class ChatBotService implements ISocketController {
       if (currentState === 'noWarning') {
         // Primer timeout - enviar advertencia
         console.log('⚠️ Enviando advertencia de inactividad');
-        this.socket.emit('respuesta', { 
+        this.socket.emit('chatbot:respuesta', { 
           mensaje: '¿Sigues ahí? ¿En qué puedo ayudarte?',
           cotizacionCompleta: false
         });
@@ -212,7 +212,7 @@ export class ChatBotService implements ISocketController {
       } else {
         // Segundo timeout - cerrar sesión
         console.log('🔴 Cerrando sesión por inactividad');
-        this.socket.emit('respuesta', { 
+        this.socket.emit('chatbot:respuesta', { 
           mensaje: 'No he recibido respuesta. Cerrando la sesión...',
           cotizacionCompleta: false
         });
@@ -301,7 +301,9 @@ en ese mismo formato, eres el gestor de crud de materiales.
    - Cuando tengas los 3 datos, pregunta si es todo
    - Si el usuario indica que quiere cambiar algo, tu PRIORIDAD es obtener esa actualización
    - Después de actualizar, vuelve a preguntar si es todo
-   - Considera como afirmativas respuestas como: "sí", "eso es todo", "listo", "correcto", etc.
+   - Considera como afirmativas respuestas como: "sí", "eso es todo", "listo", "correcto", o cualquier expresion de forma coloquial o informal que 
+   deduzcas que es afirmativa.
+  - una vez deduzcas que el usuario a confirmado que todo esta bien le generaras un resumen de la cotizacion automaticamente.
 
 Tu respuesta debe seguir EXACTAMENTE este formato:
 \`\`\`json
@@ -346,7 +348,10 @@ en ese mismo formato, eres el gestor de crud de materiales.
    - Cuando tengas los 3 datos, pregunta si es todo
    - Si el usuario indica que quiere cambiar algo, tu PRIORIDAD es obtener esa actualización
    - Después de actualizar, vuelve a preguntar si es todo
-   - Considera como afirmativas respuestas como: "sí", "eso es todo", "listo", "correcto", etc.
+  - Considera como afirmativas respuestas como: "sí", "eso es todo", "listo", "correcto", o cualquier expresion de forma coloquial o informal que 
+   deduzcas que es afirmativa.
+  - una vez deduzcas que el usuario a confirmado que todo esta bien le generaras un resumen de la cotizacion automaticamente.
+
 
 Tu respuesta debe seguir EXACTAMENTE este formato:
 \`\`\`json
