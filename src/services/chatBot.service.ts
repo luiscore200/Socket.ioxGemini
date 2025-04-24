@@ -1,6 +1,6 @@
+import { Socket, Server } from 'socket.io';
+import { ISocketController } from '../types/socket.interface';
 import { GeminiModel } from '../models/gemini.model';
-import {  Socket } from 'socket.io';
-
 
 interface ConversationContext {
   materiales: any[];
@@ -15,79 +15,66 @@ interface ConversationContext {
 }
 
 export interface CotizacionData {
-    materiales: Material[];
-    direccion: string;
-    metodo_pago: string;
-  }
+  materiales: Material[];
+  direccion: string;
+  metodo_pago: string;
+}
 
-  export interface GeminiResponse {
-    data: Partial<CotizacionData>;
-    mensaje: string;
-  }
+export interface GeminiResponse {
+  data: Partial<CotizacionData>;
+  mensaje: string;
+}
 
-  export interface Material {
-    nombre: string;
-    descripcion: string;
-    cantidad: string;
-  }
-  
+export interface Material {
+  nombre: string;
+  descripcion: string;
+  cantidad: string;
+}
 
 type SocketState = 'noWarning' | 'inWarning';
 
-export class ChatService {
+export class ChatBotService implements ISocketController {
   private geminiModel: GeminiModel;
   private socketStates: Map<string, SocketState> = new Map();
   private timeouts: Map<string, NodeJS.Timeout[]> = new Map();
   private conversationContext: Map<string, ConversationContext> = new Map();
-  private rooms: Map<string, Set<string>> = new Map(); // Map to store room members
 
-
-  constructor(geminiModel: GeminiModel) {
+  constructor(private socket: Socket, private io: Server, geminiModel: GeminiModel) {
     this.geminiModel = geminiModel;
   }
 
-  public handleNewConnection(socket: Socket): void {
-    console.log('🟢 Usuario conectado:', socket.id);
+  public register(): void {
+    console.log('🟢 Bot conectado:', this.socket.id);
     
     // Inicializar estado y contexto
-    this.socketStates.set(socket.id, 'noWarning');
-    this.timeouts.set(socket.id, []);
-    this.conversationContext.set(socket.id, {
+    this.socketStates.set(this.socket.id, 'noWarning');
+    this.timeouts.set(this.socket.id, []);
+    this.conversationContext.set(this.socket.id, {
       materiales: [],
       direccion: "",
       metodo_pago: "",
       history: []
     });
     
-    // Manejar mensajes del usuario
-    socket.on('mensaje', async (data: { mensaje: string }) => {
-      await this.handleMessage(socket, data);
-    });
-
-    // Manejar unión a sala
-    socket.on('joinRoom', (roomId: string) => {
-      this.joinRoom(socket, roomId);
-    });
-
-    // Manejar salida de sala
-    socket.on('leaveRoom', (roomId: string) => {
-      this.leaveRoom(socket, roomId);
+    // Manejar mensajes del usuario desde front-end
+    this.socket.on('mensaje', async (data: { mensaje: string }) => {
+      console.log('📨 Mensaje recibido por el bot:', data.mensaje);
+      await this.handleMessage(data.mensaje);
     });
 
     // Manejar desconexión
-    socket.on('disconnect', () => {
-      console.log('🔴 Usuario desconectado:', socket.id);
-      this.cleanupSocket(socket);
+    this.socket.on('disconnect', () => {
+      console.log('🔴 Bot desconectado:', this.socket.id);
+      this.cleanupSocket();
     });
 
     // Iniciar la conversación
-    this.startConversation(socket);
+    this.startConversation();
   }
 
-  private async startConversation(socket: Socket): Promise<void> {
+  private async startConversation(): Promise<void> {
     try {
-
-        const context = `Información actual del cliente:
+      const context = `Información actual del cliente:
         Materiales: [],
         Dirección: "",
         Método de pago: ""
@@ -95,36 +82,36 @@ export class ChatService {
         Mensaje del cliente: "Hola, ¿en qué puedo ayudarte?"`;
 
       const response = await this.geminiModel.procesarMensaje({ 
-        premisa_base:premisa_base,
-        premisa:premisa_init,
+        premisa_base: premisa_base,
+        premisa: premisa_init,
         data: context
       });
 
       const parsedResponse = await this.parsedResponse(response);
 
-      this.addToHistory(socket.id, 'assistant',  parsedResponse.mensaje);
-      socket.emit('respuesta', parsedResponse);
-      this.scheduleTimeout(socket);
+      this.addToHistory('assistant', parsedResponse.mensaje);
+      this.socket.emit('respuesta', parsedResponse);
+      this.scheduleTimeout();
     } catch (error) {
       console.error('Error al iniciar la conversación:', error);
-      socket.emit('respuesta', { 
+      this.socket.emit('respuesta', { 
         data: {},
         mensaje: 'Hola, ¿en qué puedo ayudarte?'
       });
-      this.scheduleTimeout(socket);
+      this.scheduleTimeout();
     }
   }
 
-  private async handleMessage(socket: Socket, data: { mensaje: string }): Promise<void> {
-    console.log('📨 Mensaje recibido:', data);
+  private async handleMessage(mensaje: string): Promise<void> {
+    console.log('📨 Procesando mensaje en handleMessage:', mensaje);
     
     // Limpiar timeouts existentes
-    this.clearTimeouts(socket.id);
+    this.clearTimeouts();
     
     // Obtener y actualizar contexto
-    const prev_context = this.conversationContext.get(socket.id)!;
-    this.updateContext(prev_context, data.mensaje);
-    this.addToHistory(socket.id, 'user', data.mensaje);
+    const prev_context = this.conversationContext.get(this.socket.id)!;
+    this.updateContext(prev_context, mensaje);
+    this.addToHistory('user', mensaje);
 
     try {
       const context = `Información actual del cliente:
@@ -132,7 +119,7 @@ export class ChatService {
         Dirección: ${prev_context.direccion},
         Método de pago: ${prev_context.metodo_pago},
         
-        Mensaje del cliente: ${data.mensaje}`;
+        Mensaje del cliente: ${mensaje}`;
 
       const input = {
         premisa_base: premisa_base,
@@ -154,39 +141,30 @@ export class ChatService {
         if (parsedResponse.data.metodo_pago) prev_context.metodo_pago = parsedResponse.data.metodo_pago;
       }
 
-      this.addToHistory(socket.id, 'assistant', parsedResponse.mensaje);
+      this.addToHistory('assistant', parsedResponse.mensaje);
 
-      // Enviar respuesta a la sala si el socket está en una
-      const rooms = Array.from(socket.rooms);
-      if (rooms.length > 1) { // Si está en más de una sala (incluyendo su sala personal)
-        const roomId = rooms.find(room => room !== socket.id);
-        if (roomId) {
-          socket.to(roomId).emit('respuesta', parsedResponse);
-        }
-      }
-      
-      // Siempre enviar respuesta al emisor
-      socket.emit('respuesta', parsedResponse);
+      // Enviar respuesta al emisor
+      this.socket.emit('respuesta', parsedResponse);
       
       // Resetear estado a noWarning
-      this.socketStates.set(socket.id, 'noWarning');
+      this.socketStates.set(this.socket.id, 'noWarning');
       
       // Programar nuevo timeout
-      this.scheduleTimeout(socket);
+      this.scheduleTimeout();
     } catch (error) {
       console.error('Error al procesar mensaje:', error);
-      socket.emit('respuesta', {
+      this.socket.emit('respuesta', {
         mensaje: 'Lo siento, hubo un error al procesar tu mensaje.',
         cotizacionCompleta: false
       });
     }
   }
 
-  private clearTimeouts(socketId: string): void {
-    const socketTimeouts = this.timeouts.get(socketId);
+  private clearTimeouts(): void {
+    const socketTimeouts = this.timeouts.get(this.socket.id);
     if (socketTimeouts) {
       socketTimeouts.forEach(timeout => clearTimeout(timeout));
-      this.timeouts.set(socketId, []);
+      this.timeouts.set(this.socket.id, []);
     }
   }
 
@@ -194,8 +172,8 @@ export class ChatService {
     context.ultimoMensaje = mensaje;
   }
 
-  private addToHistory(socketId: string, role: 'user' | 'assistant', content: string): void {
-    const context = this.conversationContext.get(socketId);
+  private addToHistory(role: 'user' | 'assistant', content: string): void {
+    const context = this.conversationContext.get(this.socket.id);
     if (context) {
       context.history.push({
         role,
@@ -205,123 +183,66 @@ export class ChatService {
     }
   }
 
-  private cleanupSocket(socket: Socket): void {
-    this.clearTimeouts(socket.id);
-    this.socketStates.delete(socket.id);
-    this.conversationContext.delete(socket.id);
+  private cleanupSocket(): void {
+    this.clearTimeouts();
+    this.socketStates.delete(this.socket.id);
+    this.conversationContext.delete(this.socket.id);
   }
 
-  private scheduleTimeout(socket: Socket): void {
-    const socketTimeouts = this.timeouts.get(socket.id) || [];
-    const currentState = this.socketStates.get(socket.id) || 'noWarning';
+  private scheduleTimeout(): void {
+    const socketTimeouts = this.timeouts.get(this.socket.id) || [];
+    const currentState = this.socketStates.get(this.socket.id) || 'noWarning';
+
+    console.log(`⏰ Programando timeout para ${this.socket.id} en estado ${currentState}`);
 
     const timeout = setTimeout(() => {
+      console.log(`⏰ Timeout ejecutado para ${this.socket.id} en estado ${currentState}`);
+      
       if (currentState === 'noWarning') {
         // Primer timeout - enviar advertencia
-        socket.emit('respuesta', { 
+        console.log('⚠️ Enviando advertencia de inactividad');
+        this.socket.emit('respuesta', { 
           mensaje: '¿Sigues ahí? ¿En qué puedo ayudarte?',
           cotizacionCompleta: false
         });
-        this.socketStates.set(socket.id, 'inWarning');
+        this.socketStates.set(this.socket.id, 'inWarning');
         
         // Programar segundo timeout
-        this.scheduleTimeout(socket);
+        this.scheduleTimeout();
       } else {
         // Segundo timeout - cerrar sesión
-        socket.emit('respuesta', { 
+        console.log('🔴 Cerrando sesión por inactividad');
+        this.socket.emit('respuesta', { 
           mensaje: 'No he recibido respuesta. Cerrando la sesión...',
           cotizacionCompleta: false
         });
-        socket.disconnect();
+        this.socket.disconnect();
       }
-    }, 30000);
+    }, 30000); // 30 segundos
 
     socketTimeouts.push(timeout);
-    this.timeouts.set(socket.id, socketTimeouts);
+    this.timeouts.set(this.socket.id, socketTimeouts);
   }
 
-  private joinRoom(socket: Socket, roomId: string): void {
-    // Dejar cualquier sala existente
-    this.leaveAllRooms(socket);
-
-    // Unirse a la nueva sala
-    socket.join(roomId);
-    
-    // Actualizar el mapa de salas
-    if (!this.rooms.has(roomId)) {
-      this.rooms.set(roomId, new Set());
-    }
-    this.rooms.get(roomId)?.add(socket.id);
-
-    console.log(`👥 Usuario ${socket.id} se unió a la sala ${roomId}`);
-    socket.emit('roomJoined', { roomId });
-  }
-
-  private leaveRoom(socket: Socket, roomId: string): void {
-    socket.leave(roomId);
-    this.rooms.get(roomId)?.delete(socket.id);
-    
-    // Limpiar la sala si está vacía
-    if (this.rooms.get(roomId)?.size === 0) {
-      this.rooms.delete(roomId);
-    }
-
-    console.log(`👋 Usuario ${socket.id} dejó la sala ${roomId}`);
-    socket.emit('roomLeft', { roomId });
-  }
-
-  private leaveAllRooms(socket: Socket): void {
-    // Obtener todas las salas del socket
-    const rooms = Array.from(socket.rooms);
-    
-    // Dejar cada sala
-    rooms.forEach(roomId => {
-      if (roomId !== socket.id) { // No dejar la sala personal del socket
-        this.leaveRoom(socket, roomId);
+  private async parsedResponse(text: string): Promise<any> {
+    try {
+      const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[1]);
       }
-    });
+      return {
+        data: {},
+        mensaje: text
+      };
+    } catch (error) {
+      console.error('Error al parsear la respuesta JSON:', error);
+      return {
+        data: {},
+        mensaje: text
+      };
+    }
   }
-
-  private async parsedResponse(text:string):Promise<any>{
-    
-      // Intentar extraer la respuesta en formato JSON
-      try {
-        const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          return JSON.parse(jsonMatch[1]);
-        }
-        // Si no encuentra el formato JSON, devolver la respuesta como mensaje
-        return {
-          data: {},
-          mensaje: text
-        };
-      } catch (error) {
-        console.error('Error al parsear la respuesta JSON:', error);
-        return {
-          data: {},
-          mensaje: text
-        };
-      }
-  }
-
-
-} 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+}
 
 const premisa_base:string =  `Eres un asistente de cotizaciones amable y conversacional. 
 Tu objetivo es obtener esta información del cliente de manera natural:
@@ -354,7 +275,6 @@ IMPORTANTE: Tu respuesta debe seguir EXACTAMENTE este formato:
 
 En el campo "data" solo debes incluir los datos que hayan sido actualizados o confirmados en el mensaje actual.
 El campo "mensaje" debe contener tu respuesta natural al usuario.`;
-
 
 const premisa_init:string= `Eres un asistente de cotizaciones. Tu objetivo es obtener información en este orden de prioridad:
 
@@ -400,7 +320,6 @@ Tu respuesta debe seguir EXACTAMENTE este formato:
   "mensaje": "tu respuesta al usuario"
 }
 \`\`\``;
-
 
 const premisa_nudo:string=  `Eres un asistente de cotizaciones. Tu objetivo es obtener información en este orden de prioridad:
 

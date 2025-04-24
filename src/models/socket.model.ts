@@ -1,8 +1,8 @@
 import { Server, Socket } from "socket.io";
 import { ISocketController } from "../types/socket.interface";
 import { ChatController } from "../services/chat.service";
-
-
+import { ChatBotService } from "../services/chatBot.service";
+import { GeminiModel } from "./gemini.model";
 
 //import { ChatController } from "./controllers/chat.controller";
 
@@ -13,8 +13,10 @@ export class SocketService {
     this.io.on('connection', (socket: Socket) => {
       console.log(`🟢 Socket conectado: ${socket.id}`);
 
+      const geminiModel = new GeminiModel(process.env.GEMINI_API_KEY || '');
       const controllers: ISocketController[] = [
-      new ChatController(socket,this.io),
+        new ChatController(socket, this.io),
+        new ChatBotService(socket, this.io, geminiModel),
         // Aquí puedes agregar más controladores en el futuro
       ];
 

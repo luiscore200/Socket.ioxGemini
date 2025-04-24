@@ -1,5 +1,4 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
-import { CotizacionData } from '../services/chatBot.service';
 
 // Configuración de seguridad
 const safetySettings = [

@@ -1,9 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { GeminiModel } from './models/gemini.model';
 import { SocketService } from './models/socket.model';
-import { ChatService } from './services/chatBot.service';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -29,13 +27,9 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Inicializar modelos y servicios
-const geminiModel = new GeminiModel(process.env.GEMINI_API_KEY || '');
-const socketModel = new SocketService(io);
-const chatService = new ChatService(geminiModel);
-
-// Inicializar Socket.IO con el servicio de chat
+// Inicializar Socket.IO
 new SocketService(io).initialize();
+
 // Iniciar servidor
 httpServer.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
