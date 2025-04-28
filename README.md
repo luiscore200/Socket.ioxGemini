@@ -1,6 +1,6 @@
 # Chat Inteligente con Socket.IO y ChatGPT (TypeScript)
 
-Este es un proyecto de chat inteligente que utiliza Socket.IO para la comunicación en tiempo real y la API de ChatGPT 3.5 para generar respuestas inteligentes. El proyecto está desarrollado en TypeScript para un mejor desarrollo y mantenimiento.
+Este es un proyecto de chat inteligente que utiliza Socket.IO para la comunicación en tiempo real y la API de Gemini para generar respuestas inteligentes. El proyecto está desarrollado en TypeScript para un mejor desarrollo y mantenimiento.
 
 ## Requisitos
 
