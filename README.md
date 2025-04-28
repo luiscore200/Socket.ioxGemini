@@ -61,7 +61,7 @@ El chat estará disponible en `http://localhost:3000`
 
 - Interfaz de usuario moderna y responsive
 - Comunicación en tiempo real con Socket.IO
-- Integración con ChatGPT 3.5
+- Integración con gemini
 - Diseño similar a WhatsApp
 - Soporte para mensajes de error
 - Historial de chat en tiempo real
@@ -72,4 +72,4 @@ El chat estará disponible en `http://localhost:3000`
 
 - Asegúrate de tener una conexión a internet estable
 - La API de OpenAI tiene límites de uso, consulta su documentación para más detalles
-- El proyecto está configurado para usar el modelo gpt-3.5-turbo 
+- El proyecto está configurado para usar el modelo gemini-lite
